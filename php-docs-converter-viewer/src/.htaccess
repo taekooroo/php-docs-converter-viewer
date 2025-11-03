@@ -1,0 +1,4 @@
+RewriteEngine On
+
+# /report 또는 /report/ 를 controller/Report.php로 전달, 쿼리스트링 유지, 대소문자 무시
+RewriteRule ^report/?$ controller/Report.php [L,QSA,NC]
