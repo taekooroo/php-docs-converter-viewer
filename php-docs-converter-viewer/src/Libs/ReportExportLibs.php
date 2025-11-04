@@ -86,7 +86,8 @@ class ReportExportLibs {
         header('Cache-Control: no-cache, must-revalidate');
         header('Pragma: no-cache');
 
-        if (empty(!$imgData)) {
+        $imageBase64 = null;
+        if (!empty($imgData)) {
             $extension = $imgData['extension'];
             $imageBase64 = "data:image/{$extension};base64," . base64_encode(file_get_contents($_SERVER['DOCUMENT_ROOT'].$imgData['path']));
         }
@@ -97,6 +98,7 @@ class ReportExportLibs {
         ];
 
         echo json_encode($arrResult, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
     }
     
     /**

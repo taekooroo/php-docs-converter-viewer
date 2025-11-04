@@ -77,6 +77,7 @@ const defaultLuckysheetOptions = {
  * @param {object} [userOptions={}] - 사용자가 재정의할 옵션 객체
  */
 const displayExcelSheet = (blobData, containerId, userOptions = {}, imgDatas = {}) => {
+    console.log("userOptions", userOptions.hook);
 
     if (window.luckysheet) window.luckysheet.destroy();
 
@@ -134,13 +135,11 @@ const displayExcelSheet = (blobData, containerId, userOptions = {}, imgDatas = {
         sheet.zoomRatio = mergedOptions.zoomRatio;
         sheet.showGridLines = mergedOptions.showGridLines;
 
-
-
         luckysheet.create({
             container: containerId,
             data: [sheet],
             ...mergedOptions.options,
-            ...mergedOptions.hook,
+            hook: mergedOptions.hook,
         });
     });
 };
