@@ -1,0 +1,60 @@
+body {
+    overflow-y: scroll;
+}
+
+.preview-container {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    height: 600px; /* 고정 높이 설정 */
+    width: 100%;
+    overflow: hidden; /* 내부 스크롤 방지 */
+    position: relative;
+}
+
+#luckysheet {
+    position: absolute !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.download-section {
+    background-color: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    padding: 20px;
+}
+
+.table-preview {
+    font-size: 0.9em;
+}
+
+.btn-download {
+    min-width: 120px;
+}
+
+.card {
+    margin-bottom: 1.5rem;
+}
+
+.card-body {
+    padding: 1rem;
+}
+
+/* 로딩 상태 */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.loading-overlay.hidden {
+    display: none;
+}
