@@ -1,7 +1,8 @@
 {
     "require": {
         "phpoffice/phpspreadsheet": "^1.28",
-        "symfony/intl": "^7.2"
+        "symfony/intl": "^7.2",
+        "pelago/emogrifier": "^8.1"
     },
     "config": {
         "platform": {

@@ -1,7 +1,9 @@
 <?php
 namespace Libs;
 
+use DOMDocument;
 use Exception;
+use Pelago\Emogrifier\CssInliner;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
@@ -10,6 +12,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Writer\Html;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -24,27 +27,20 @@ class ReportExportLibs {
     private $configurePageSetuped = false;
     private $db;
     private $insertIdx;
-    private $fileSize;
 
     /**
      * 생성자
      * @param string|null $downloadType 'excel', 'pdf', BLOB = null
      */
-    public function __construct(?string $downloadType = null, $db = null) {
+    public function __construct(string $downloadType = "") {
         
-        $this->PDF_OUTPUT_DIR = dirname(__DIR__) . "/view/excel_templates/"; // pdf 임시 저장 경로
+        $this->PDF_OUTPUT_DIR = dirname(__DIR__) . "/temp/"; // pdf 임시 저장 경로
         $this->downloadType = $downloadType;
         $this->spreadsheet = new Spreadsheet();
         $this->sheet = $this->spreadsheet->getActiveSheet();
-        $this->db = $db;
     }
 
-    public function __destruct() {
-        if ($this->db != null) {
-            $this->db->close();
-            $this->db = null;
-        }
-    }
+    public function __destruct() {}
 
     /**
      * 엑셀 데이터 및 다운로드 호출
@@ -86,8 +82,7 @@ class ReportExportLibs {
         header('Cache-Control: no-cache, must-revalidate');
         header('Pragma: no-cache');
 
-        $imageBase64 = null;
-        if (!empty($imgData)) {
+        if (empty(!$imgData)) {
             $extension = $imgData['extension'];
             $imageBase64 = "data:image/{$extension};base64," . base64_encode(file_get_contents($_SERVER['DOCUMENT_ROOT'].$imgData['path']));
         }
@@ -98,7 +93,6 @@ class ReportExportLibs {
         ];
 
         echo json_encode($arrResult, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        exit;
     }
     
     /**
@@ -148,24 +142,23 @@ class ReportExportLibs {
         }
 
         // 정렬 옵션 처리
-        if (isset($options['align'])) {
-            $alignOption = strtolower($options['align']);
-            if ($alignOption === 'left') {
-                $horizontal = Alignment::HORIZONTAL_LEFT;
-            } elseif ($alignOption === 'right') {
-                $horizontal = Alignment::HORIZONTAL_RIGHT;
-            } else {
-                $horizontal = Alignment::HORIZONTAL_CENTER;
-            }
-        }
+        $horizontal = match (strtolower($options['align'] ?? 'center')) {
+            'left' => Alignment::HORIZONTAL_LEFT,
+            'right' => Alignment::HORIZONTAL_RIGHT,
+            default => Alignment::HORIZONTAL_CENTER,
+        };
 
-        
+        // 세로 정렬 옵션 처리
+        $vertical = match (strtolower($options['valign'] ?? 'center')) {
+            'top' => Alignment::VERTICAL_TOP,
+            'bottom' => Alignment::VERTICAL_BOTTOM,
+            default => Alignment::VERTICAL_CENTER,
+        };
 
         $this->sheet->setCellValueExplicit($cellAddress, $value, $dataType); // 셀에 값 설정
         $this->sheet->getStyle($cellAddress)->getNumberFormat()->setFormatCode($formatCode); // 셀의 숫자 형식 설정
         $this->sheet->getStyle($cellAddress)->getAlignment()->setHorizontal($horizontal); // 가로 정렬
-        $this->sheet->getStyle($cellAddress)->getAlignment()->setVertical(Alignment::VERTICAL_CENTER); // 세로 중앙 정렬
-
+        $this->sheet->getStyle($cellAddress)->getAlignment()->setVertical($vertical); // 세로 정렬
         $this->sheet->getStyle($cellAddress)->getFont()->setSize($fontSize); // 폰트 사이즈 설정
         if (!empty($options['setBold']) && $options['setBold'] === true) {
             $this->sheet->getStyle($cellAddress)->getFont()->setBold(true);
@@ -229,7 +222,7 @@ class ReportExportLibs {
      * PDF 변환 인쇄 및 페이지 설정
      */
     public function configurePageSetup(array $options = []): void {
-        $printArea = $options['printArea'] ?? 'A1:J40';
+        $printArea = $options['printArea'] ?? $this->sheet->calculateWorksheetDimension();
         $colHeight = $options['colHeight'] ?? 18;
         $colWidth = $options['colWidth'] ?? 9;
         $margins = $options['margins'] ?? [
@@ -270,7 +263,6 @@ class ReportExportLibs {
             ->setTop($margins['top'])->setBottom($margins['bottom'])
             ->setLeft($margins['left'])->setRight($margins['right']);
 
-
         $this->configurePageSetuped = true;
     }
     
@@ -290,26 +282,35 @@ class ReportExportLibs {
     public function drawImageLogo(array $imgData = []): void {
         $drawing = new Drawing();
         $drawing->setName('Logo');
-        $drawing->setDescription('Company Logo');
+        $drawing->setDescription('Image Data');
         $drawing->setPath($_SERVER['DOCUMENT_ROOT'].$imgData['path']); // 이미지 파일 경로
-        $drawing->setResizeProportional(true);
-        $drawing->setWidth($drawing->getWidth() * 0.7);
-        $drawing->setHeight($drawing->getHeight() * 0.7);
+        $drawing->setResizeProportional(false);
+        $drawing->setWidth(213);
+        $drawing->setHeight(106);
         $drawing->setCoordinates('A1'); // 삽입할 셀 위치
         $drawing->setWorksheet($this->sheet); // 워크시트 지정
     }
 
+    /**
+     * TItle 설정
+     * @param string $title
+     * @return void
+     */
+    public function setSheetTitle(string $title): void {
+       $this->spreadsheet->getProperties()->setTitle($title);
+    }
+    
     /**
      * Excel to PDF Dounload
      */
     private function downloadPdf(): void {
         $uniqueId = uniqid('export_', true);
         $xlsxFile = $this->PDF_OUTPUT_DIR . "{$uniqueId}.xlsx";
-        $pdfOutputDir = $this->PDF_OUTPUT_DIR . date('Ym');
+        $pdfOutputDir = $this->PDF_OUTPUT_DIR;
         $pdfFile = $pdfOutputDir . "/{$uniqueId}.pdf";
 
         if (!is_dir($this->PDF_OUTPUT_DIR)) {
-            mkdir($this->PDF_OUTPUT_DIR, 0755, true);
+            // 예외처리
         }
 
         // 엑셀 파일 저장
@@ -321,15 +322,14 @@ class ReportExportLibs {
 
             if (file_exists($pdfFile)) {
                 header('Content-Type: application/pdf');
-                header('Content-Disposition: attachment; filename="INVOICE.pdf"');
+                header('Content-Disposition: attachment; filename="billing.pdf"');
                 header('Content-Length: ' . filesize($pdfFile));
-                $result = readfile($pdfFile);
+                readfile($pdfFile);
             } else {
                 throw new Exception("PDF 파일 생성에 실패했습니다.");
             }
         } catch (Exception $e) {
             http_response_code(500);
-            // 실제 운영 환경에서는 로그를 남기는 것이 좋습니다.
         } finally {
             // 임시 파일 삭제
             if (file_exists($xlsxFile)) {
@@ -383,5 +383,95 @@ class ReportExportLibs {
         } else {
             throw new Exception("PDF 변환 프로세스를 실행할 수 없습니다.");
         }
+    }
+
+    /**
+     * HTML 커스터마이징
+     * @param string $imgUrl
+     * @param string $customCss
+     * @param array $options
+     *  - addClassToTd: true/false (td에 class 추가 및 span 래핑)
+     * @return string
+     */
+    private function customHtml(string $imgUrl = '', string $customCss = '', array $options = []): string {
+
+        $writer = new Html($this->spreadsheet);
+
+        // 인라인 CSS로 스타일 제외 (적용안되는 문제로 인한 라이브러리 사용)
+        $writer->setUseInlineCss(false);
+
+        // 이미지 포함(임베드) 여부: true면 base64로 HTML에 포함, 이메일 용량 초과로 인한 링크 처리
+        $writer->setEmbedImages(false);
+        
+        ob_start();
+        $writer->save('php://output');
+        $html = ob_get_clean();
+
+        // DOMDocument 하나만 선언해서 여러 번 사용
+        $dom = new DOMDocument();
+        libxml_use_internal_errors(true);
+        // <body> 하위 전체를 div로 감싸기
+        $dom->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $body = $dom->getElementsByTagName('body')->item(0);
+        if ($body) {
+            $div = $dom->createElement('div');
+            $div->setAttribute('id', 'custom-div');
+            while ($body->hasChildNodes()) {
+            $div->appendChild($body->firstChild);
+            }
+            $body->appendChild($div);
+        }
+        $html = $dom->saveHTML();
+
+        // img 태그 src에 $emailData['imgUrl'] 적용
+        if (!empty($imgUrl)) {
+            $domImg = new DOMDocument();
+            $imgUrl = htmlspecialchars($imgUrl, ENT_QUOTES);
+            $domImg->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+            foreach ($domImg->getElementsByTagName('img') as $img) {
+                if ($img instanceof \DOMElement && $img->getAttribute('alt') === 'Image Data') {
+                    $img->setAttribute('src', $imgUrl);
+                }
+            }
+            $html = $domImg->saveHTML();
+        }
+
+        // td에 class/style 추가 및 span 래핑
+        if (!empty($options['addClassToTd'])) {
+            $domTd = new DOMDocument();
+            $domTd->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+            foreach ($domTd->getElementsByTagName('tr') as $tr) {
+                $tds = [];
+                foreach ($tr->childNodes as $node) {
+                    if ($node instanceof \DOMElement && $node->tagName === 'td') {
+                        $tds[] = $node;
+                    }
+                }
+                foreach ($tds as $idx => $td) {
+                if ($idx === 4 || $idx === 9) {
+                    $td->setAttribute('class', trim($td->getAttribute('class') . ' right'));
+                    $span = $domTd->createElement('span');
+                    $span->setAttribute('class', 'nowrap');
+                    while ($td->hasChildNodes()) {
+                        $span->appendChild($td->firstChild);
+                    }
+                    $td->appendChild($span);
+                }
+                }
+            }
+            $html = $domTd->saveHTML();
+        }
+
+        // customCss 적용
+        if (!empty($customCss)) {
+            $domCss = new DOMDocument();
+            $domCss->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+            $styleElement = $domCss->createElement('style', $customCss);
+            $domCss->insertBefore($styleElement, $domCss->firstChild);
+            $html = $domCss->saveHTML();
+        }
+
+        // 인라인 CSS 변환
+        return CssInliner::fromHtml($html)->inlineCss()->render();
     }
 }

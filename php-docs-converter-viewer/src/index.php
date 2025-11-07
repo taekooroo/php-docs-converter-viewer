@@ -85,7 +85,7 @@
                                 </div>
                             </div>
                             <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-primary btn-download">
+                                <button type="button" id="download-button" class="btn btn-primary btn-download" onclick="exportSettings()">
                                     <i class="fas fa-download me-2"></i>
                                     다운로드
                                 </button>
@@ -128,23 +128,39 @@
             return new Blob([byteArray], { type: mimeType });
         };
 
-        // 다운로드 설정 함수
-        const exportSettings = () => {
+        // 다운로드 함수
+        const exportSettings = async () => {
+            const selectedType = $('input[name="download_type"]:checked').val();
+            try {
+                const response = await fetch('/report', {
+                    method: 'POST',
+                    body: new URLSearchParams({ 
+                        action: selectedType === "excel" ? "download_excel" : "download_pdf",
+                    })
+                });
+                if (!response.ok) throw new Error("다운로드 실패");
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+
+                // 파일명에 오늘 날짜 추가
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                const dateStr = `${yyyy}${mm}${dd}`;
+
+                a.download = `${dateStr}.${selectedType === 'excel' ? 'xlsx' : 'pdf'}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            } catch (err) {
+                console.error('다운로드 중 오류 발생:', err);
+                alert('다운로드 중 오류가 발생했습니다.');
+            }
         };
-
-        // 폼 제출 시 로딩 표시
-        document.querySelector('form').addEventListener('submit', () => {
-            const button = document.querySelector('form button[type="submit"]');
-            button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>처리 중...';
-            button.disabled = true;
-        });
-
-        // 파일 형식 변경 시 정보 업데이트
-        document.querySelectorAll('input[name="download_type"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                console.log('선택된 형식:', this.value);
-            });
-        });
 
         $(document).ready(() => {
             $.ajax({
@@ -171,7 +187,7 @@
                             endRow: 84
                         },
                         columnEnd: 10, // 마지막 열
-                        columnlen: 100, // width 조정
+                        columnlen: 150, // width 조정
                         hook: {
                             // LuckySheet가 완전히 로드된 후 실행되는 콜백
                             workbookCreateAfter: () => {

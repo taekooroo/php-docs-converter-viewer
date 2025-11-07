@@ -9,6 +9,12 @@ if (isset($_REQUEST['action'])) {
         case 'get_list':
             getReportList();
             break;
+        case 'download_excel':
+            downloadExcel();
+            break;
+        case 'download_pdf':
+            downloadPdf();
+            break;
         default:
             echo "Unknown action.";
             break;
@@ -24,7 +30,9 @@ if (isset($_REQUEST['action'])) {
 function getReportList() {
     $excel = new ReportExportLibs();
     $sheetData = dummyData();
+    // 데이터 먼저 채우고 페이지 설정을 적용해야 전체 컬럼에 너비가 반영됩니다.
     $excel->setDataColumn($sheetData);
+    $excel->configurePageSetup(pageSetting());
     $excel->streamExcelBlob($excel->getExcelBlob(), []);
 }
 
@@ -33,7 +41,14 @@ function getReportList() {
  * @return void
  */
 function downloadExcel() {
-
+    $excel = new ReportExportLibs('excel');
+    $sheetData = dummyData();
+    // 데이터 먼저 채우고 페이지 설정을 적용해야 전체 컬럼에 너비가 반영됩니다.
+    $excel->setDataColumn($sheetData);
+    $excel->configurePageSetup(pageSetting());
+    // $excel->drawImageLogo($imgData);
+    $excel->setSheetTitle("보고서 샘플");
+    $excel->generate();
 }
 
 /**
@@ -41,6 +56,13 @@ function downloadExcel() {
  * @return void
  */
 function downloadPdf() {
+    $excel = new ReportExportLibs('pdf');
+    $sheetData = dummyData();
+    $excel->setDataColumn($sheetData);
+    $excel->configurePageSetup(pageSetting('download_pdf'));
+    // $excel->drawImageLogo($imgData);
+    $excel->setSheetTitle("보고서 샘플");
+    $excel->generate();
 
 }
 
@@ -83,4 +105,46 @@ function dummyData() {
     }
 
     return $data;
+}
+
+/**
+ * 엑셀 시트 설정
+ * @return array
+ */
+function pageSetting($action = '') {
+    $defaults = [
+        'printArea' => 'A1:J40',
+        'margins' => [
+            'top' => 0.236,
+            'bottom' => 0.236,
+            'left' => 0.236,
+            'right' => 0.236,
+        ]
+    ];
+
+    $options = ($action === 'download_pdf')
+        ? array_merge($defaults, [
+            'colHeight' => 18,
+            'colWidth' => 10,
+            'wrapText' => true, // 자동 줄바꿈
+            'margins' => array_merge($defaults['margins'], [
+                'top' => 0.236,
+            ])
+        ])
+        : array_merge($defaults, [
+            'colHeight' => 18,
+            'colWidth' => 25,
+            'margins' => array_merge($defaults['margins'], [
+                'top' => 0.787,
+            ])
+        ]);
+    return $options;
+}
+
+
+function writeLog(string $message, string $logFilePath = __DIR__ . '/app.log'): void
+{
+    $timestamp = date('Y-m-d H:i:s');
+    $logEntry = sprintf("[%s] %s\n", $timestamp, $message);
+    file_put_contents($logFilePath, $logEntry, LOCK_EX);
 }
